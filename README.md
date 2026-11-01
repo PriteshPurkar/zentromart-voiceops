@@ -1,4 +1,23 @@
-# Capstone practice dataset: ZentroMart customer support
+# ZentroMart VoiceOps 2026
+
+**AI Customer Support Agent with Voice (LLM + RAG + Gnani STT/TTS)**
+
+This is the final submission for the VoiceOps 2026 capstone by the Consulting & Analytics Club, IIT Guwahati.
+
+## 🚀 Quick Start
+
+### 1. Prerequisites
+- Python 3.11 or 3.12 (tested on 3.13)
+- A Groq API Key (Free)
+- A Gnani API Key (STT + TTS)
+
+### 2. Installation
+```bash
+git clone https://github.com/YOUR_USERNAME/zentromart-voiceops.git
+cd zentromart-voiceops
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
 
 Everything here is synthetic. ZentroMart is a fictional Indian online store. No real customers, orders, phone numbers or recordings were used. Phone numbers use an unallocated prefix (+91 5…) and every email is on example.com.
 

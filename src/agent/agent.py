@@ -4,6 +4,7 @@ Handles multi-turn history, order lookups, and ticket creation.
 """
 import re
 import json
+from word2number import w2n
 from typing import List, Dict
 
 from src.llm import get_llm_client, GROQ_MODEL
@@ -22,43 +23,96 @@ You must follow these rules strictly:
 2. If you need the user's order ID, ask for it.
 3. Be polite, concise, and professional. Never output empty responses."""
 
+    def _normalize_stt_numbers(self, text: str) -> str:
+        """Converts spoken number words (e.g., 'six nine') to digits."""
+        # Replace 'pin code' with 'pincode'
+        text = text.lower().replace("pin code", "pincode")
+        
+        num_map = {
+            "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+            "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"
+        }
+        
+        words = text.split()
+        result = []
+        current_number_block = ""
+        
+        for word in words:
+            # Clean punctuation to check if it's a number
+            clean_word = word.strip(",.?!")
+            
+            if clean_word in num_map:
+                # Append the digit to our current block
+                current_number_block += num_map[clean_word]
+            else:
+                # If the word is not a number, save the current block (if any)
+                if current_number_block:
+                    result.append(current_number_block)
+                    current_number_block = ""
+                # Add the non-number word
+                result.append(word)
+                
+        # Catch any number block at the end of the sentence
+        if current_number_block:
+            result.append(current_number_block)
+            
+        return " ".join(result)
+
     def _extract_order_id(self, text: str) -> str | None:
         """Looks for an 8-digit order ID in the text."""
         match = re.search(r'\b\d{8}\b', text.replace(" ", ""))
         return match.group(0) if match else None
 
     def chat(self, user_message: str) -> str:
+        # Normalize STT numbers into digits
+        user_message = self._normalize_stt_numbers(user_message)
+        
         self.history.append({"role": "user", "content": user_message})
         
-        # 1. Retrieve RAG context
-        chunks = self.retriever.search(user_message, k=3)
-        context_text = "\n".join([f"[{c.chunk.section_id}] {c.chunk.text}" for c in chunks])
+        # 1. Extract numbers directly from the normalized string
+        import re
+        # Find all sequences of digits in the message
+        all_numbers = re.findall(r'\d+', user_message)
         
-        # 2. Tool Logic
-        order_id = self._extract_order_id(user_message)
+        order_id = None
+        verify_value = None
+        
+        # A valid order ID is 8 digits, a valid pincode is 6 digits, phone suffix is 4 digits
+        for num in all_numbers:
+            if len(num) == 8:
+                order_id = num
+            elif len(num) == 6:
+                verify_value = num
+            elif len(num) == 4:
+                verify_value = num
+        
+        # If no order ID in this message, check history
         if not order_id:
             for msg in reversed(self.history):
                 if msg["role"] == "user":
-                    order_id = self._extract_order_id(msg["content"])
+                    history_nums = re.findall(r'\d+', msg["content"])
+                    for num in history_nums:
+                        if len(num) == 8:
+                            order_id = num
+                            break
                     if order_id:
                         break
-        
+
         tool_context = ""
         order_data = None
-        gave_verification_this_turn = False
         
+        # 2. Tool Logic
         if order_id:
-            # Look for 4 or 6 digit code in current message, excluding the order ID
-            clean_message = user_message.replace(order_id, "")
-            verify_match = re.search(r'\b(\d{4}|\d{6})\b', clean_message)
-            verify_value = verify_match.group(0) if verify_match else None
-            
             order_data = self.tools.verify_and_lookup(order_id, verification_value=verify_value)
             
-            if order_id in self.tools.verified_orders:
-                if verify_value:  # They JUST provided a code this turn
-                    gave_verification_this_turn = True
+            if order_data.get("verified") and verify_value:
+                # HARD OVERRIDE: Return immediately
+                status = order_data.get('status', 'unknown')
+                reply = f"Thank you, your identity is verified. Your order is currently {status}. How can I help you with this?"
+                self.history.append({"role": "assistant", "content": reply})
+                return reply
                 
+            elif order_id in self.tools.verified_orders:
                 status = order_data.get('status', 'unknown')
                 total = order_data.get('total_inr', 'unknown')
                 items = ", ".join([i['title'] for i in order_data.get('items', [])])
@@ -68,28 +122,25 @@ You must follow these rules strictly:
             elif order_data.get("verified") is False:
                 tool_context = "[SYSTEM NOTE: Verification FAILED. Apologize and ask them to try again.]"
 
-        # 3. Build the prompt
+        # 3. Retrieve RAG context
+        chunks = self.retriever.search(user_message, k=3)
+        context_text = "\n".join([f"[{c.chunk.section_id}] {c.chunk.text}" for c in chunks])
+        
+        # 4. Build the prompt
         dynamic_prompt = f"Context from documents:\n{context_text}\n"
         
-        # 4. If they just verified, override and skip the LLM entirely
-        if gave_verification_this_turn:
-            status = order_data.get('status')
-            reply = f"Thank you, your identity is verified. Your order is currently {status}. How can I help you with this?"
-            self.history.append({"role": "assistant", "content": reply})
-            return reply
-
-        # 5. Otherwise, use LLM
         enhanced_system = f"{self.system_prompt}\n\n{tool_context}\n"
         messages = [{"role": "system", "content": enhanced_system}]
         messages.extend(self.history[-4:]) 
         messages[-1]["content"] = f"{dynamic_prompt}\nCustomer message: {user_message}"
         
+        # 5. Get LLM Response
         client = get_llm_client()
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=messages,
             temperature=0.1,
-            max_tokens=250,
+            max_tokens=300,
         )
         
         reply = response.choices[0].message.content
