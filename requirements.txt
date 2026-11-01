@@ -1,0 +1,37 @@
+# ============================================================
+# ZentroMart VoiceOps 2026 — Python dependencies
+# Install with:  pip install -r requirements.txt
+# ============================================================
+
+# --- Core ---
+python-dotenv>=1.0.1
+pandas>=2.2.0
+numpy>=1.26.0
+
+# --- LLMs (OpenAI + Groq, both supported) ---
+openai>=1.40.0
+groq>=0.11.0
+
+# --- Embeddings (local, free) ---
+sentence-transformers>=3.0.0
+torch>=2.3.0
+
+# --- Vector store ---
+faiss-cpu>=1.8.0
+
+# --- RAG chunking (Markdown-aware, preserves [SECTION-ID]) ---
+langchain-text-splitters>=0.3.0
+
+# --- Gnani voice SDK (REQUIRED — no substitutes allowed) ---
+gnani-vachana
+
+# --- Audio I/O for testing & batch runner ---
+soundfile>=0.12.1
+sounddevice>=0.4.7
+
+# --- Evaluation ---
+scikit-learn>=1.5.0
+tqdm>=4.66.0
+
+# --- Dev / test ---
+pytest>=8.2.0

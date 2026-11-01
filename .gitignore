@@ -1,0 +1,40 @@
+# Secrets
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Venv
+venv/
+.venv/
+
+# Data & artifacts (dataset is supplied separately, don't commit)
+data/
+kb/
+practice/
+tools/tickets_created.csv
+sample_outputs/
+*.faiss
+*.pkl
+*.index
+cache/
+
+# Audio / media
+*.wav
+*.mp3
+*.mp4
+!demo.mp4
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
